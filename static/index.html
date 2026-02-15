@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Semantic Feedback Loop</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #14141f;
+    --border: #2a2a3a;
+    --text: #e0e0e8;
+    --text-dim: #8888a0;
+    --accent: #6c5ce7;
+    --accent-glow: rgba(108, 92, 231, 0.3);
+    --error: #e74c3c;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  input[type="text"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    width: 320px;
+  }
+
+  input[type="number"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.5rem;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    width: 60px;
+    text-align: center;
+  }
+
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 0.5rem 1.2rem;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  button:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.stop { background: var(--error); }
+
+  #status-bar {
+    padding: 0.5rem 2rem;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .status-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 0.4rem;
+    vertical-align: middle;
+  }
+
+  .status-dot.idle { background: var(--text-dim); }
+  .status-dot.running { background: #2ecc71; animation: pulse 1s infinite; }
+  .status-dot.stopped { background: #f39c12; }
+  .status-dot.finished { background: var(--accent); }
+  .status-dot.error { background: var(--error); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  #timeline {
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .iteration-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem;
+    display: grid;
+    grid-template-columns: 1fr 320px 1fr;
+    gap: 1.25rem;
+    align-items: start;
+    animation: fadeIn 0.4s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .iter-number {
+    font-size: 0.7rem;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.5rem;
+  }
+
+  .iter-section h3 {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.5rem;
+  }
+
+  .iter-section p {
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text);
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .iter-image img {
+    width: 100%;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+
+  .iter-error {
+    color: var(--error);
+    font-size: 0.8rem;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    line-height: 1.8;
+  }
+
+  @media (max-width: 900px) {
+    .iteration-card {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SEMANTIC FEEDBACK LOOP</h1>
+  <div class="controls">
+    <input type="text" id="prompt-input" placeholder="Enter seed prompt...">
+    <label style="font-size:0.75rem; color:var(--text-dim)">N:</label>
+    <input type="number" id="max-iter" value="10" min="1" max="100">
+    <button id="start-btn" onclick="startLoop()">START</button>
+    <button id="stop-btn" class="stop" onclick="stopLoop()" disabled>STOP</button>
+  </div>
+</header>
+
+<div id="status-bar">
+  <span><span class="status-dot idle" id="status-dot"></span> <span id="status-text">Idle</span></span>
+  <span>Iterations: <span id="iter-count">0</span></span>
+  <span>WS: <span id="ws-status">disconnected</span></span>
+</div>
+
+<div id="timeline">
+  <div class="empty-state" id="empty-state">
+    Enter a seed prompt and click START to begin the feedback loop.<br>
+    Each iteration: prompt &rarr; Claude generates visuals &rarr; screenshot &rarr; Claude describes &rarr; repeat.
+  </div>
+</div>
+
+<script>
+  let ws = null;
+  const timeline = document.getElementById('timeline');
+  const emptyState = document.getElementById('empty-state');
+  const statusDot = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+  const iterCount = document.getElementById('iter-count');
+  const wsStatus = document.getElementById('ws-status');
+  const startBtn = document.getElementById('start-btn');
+  const stopBtn = document.getElementById('stop-btn');
+
+  function connectWS() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+    ws.onopen = () => {
+      wsStatus.textContent = 'connected';
+    };
+
+    ws.onclose = () => {
+      wsStatus.textContent = 'disconnected';
+      setTimeout(connectWS, 2000);
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.type === 'iteration') {
+        addIteration(data.iteration);
+        setStatus(data.status);
+        iterCount.textContent = data.iteration.index + 1;
+      }
+
+      if (data.type === 'run_complete') {
+        setStatus(data.status);
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+
+      if (data.type === 'error') {
+        setStatus('error');
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+    };
+  }
+
+  function setStatus(s) {
+    statusDot.className = 'status-dot ' + s;
+    statusText.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function addIteration(iter) {
+    if (emptyState) emptyState.remove();
+
+    const card = document.createElement('div');
+    card.className = 'iteration-card';
+
+    const promptSection = document.createElement('div');
+    promptSection.className = 'iter-section';
+    promptSection.innerHTML = `
+      <div class="iter-number">Iteration ${iter.index}</div>
+      <h3>Prompt</h3>
+      <p>${escapeHtml(iter.prompt)}</p>
+    `;
+
+    const imageSection = document.createElement('div');
+    imageSection.className = 'iter-image';
+    if (iter.image_path) {
+      // Convert absolute path to relative URL
+      const parts = iter.image_path.split('/runs/');
+      const relPath = parts.length > 1 ? '/runs/' + parts[1] : iter.image_path;
+      imageSection.innerHTML = `<img src="${relPath}" alt="Iteration ${iter.index}" loading="lazy">`;
+    }
+
+    const descSection = document.createElement('div');
+    descSection.className = 'iter-section';
+    if (iter.error) {
+      descSection.innerHTML = `<h3>Error</h3><p class="iter-error">${escapeHtml(iter.error)}</p>`;
+    } else {
+      descSection.innerHTML = `
+        <h3>Description</h3>
+        <p>${escapeHtml(iter.description)}</p>
+      `;
+    }
+
+    card.appendChild(promptSection);
+    card.appendChild(imageSection);
+    card.appendChild(descSection);
+    timeline.appendChild(card);
+
+    card.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }
+
+  function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  async function startLoop() {
+    const prompt = document.getElementById('prompt-input').value.trim();
+    if (!prompt) return alert('Enter a seed prompt');
+
+    const maxIter = parseInt(document.getElementById('max-iter').value) || 10;
+
+    // Clear timeline
+    timeline.innerHTML = '';
+    iterCount.textContent = '0';
+
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    setStatus('running');
+
+    const res = await fetch('/api/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, max_iterations: maxIter }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error || 'Failed to start');
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      setStatus('idle');
+    }
+  }
+
+  async function stopLoop() {
+    stopBtn.disabled = true;
+    await fetch('/api/stop', { method: 'POST' });
+  }
+
+  connectWS();
+</script>
+
+</body>
+</html>
